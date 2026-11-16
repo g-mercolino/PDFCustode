@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' blob:; img-src 'self' blob: data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>PDF Custode</title>
+<link rel="stylesheet" href="reader.css">
+<script defer src="_framework/hybridwebview.js"></script>
+<script type="module" src="reader.mjs"></script>
+</head>
+<body>
+<header>
+  <div class="navigation">
+    <strong>PDF Custode</strong>
+    <button id="previous" aria-label="Pagina precedente" disabled>←</button>
+    <span id="page" aria-live="polite">–</span>
+    <button id="next" aria-label="Pagina successiva" disabled>→</button>
+    <button id="zoom-out" aria-label="Riduci" disabled>−</button>
+    <button id="zoom-in" aria-label="Ingrandisci" disabled>+</button>
+  </div>
+  <form id="search">
+    <input id="query" type="search" placeholder="Cerca nel documento" aria-label="Testo da cercare" autocomplete="off" maxlength="200">
+    <button id="find" disabled>Cerca</button>
+  </form>
+  <div class="matches" id="matches" hidden>
+    <span id="count" role="status"></span>
+    <button id="match-previous">Precedente</button>
+    <button id="match-next">Successivo</button>
+  </div>
+</header>
+<main id="viewport" aria-label="Pagina del PDF">
+  <p id="status" role="status">Apertura del documento…</p>
+  <canvas id="canvas" aria-label="Contenuto della pagina"></canvas>
+</main>
+</body>
+</html>
