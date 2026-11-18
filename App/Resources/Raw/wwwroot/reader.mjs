@@ -14,6 +14,62 @@ let searchRevision = 0;
 let matches = [];
 let matchIndex = 0;
 const pageText = new Map();
+const thumbnails = get("thumbnails");
+const thumbnailQueue = [];
+let drawingThumbnail = false;
+const thumbnailObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    thumbnailObserver.unobserve(entry.target);
+    thumbnailQueue.push(entry.target);
+  }
+  drawThumbnails();
+}, { root: thumbnails.parentElement, rootMargin: "200px" });
+
+function createThumbnails() {
+  const fragment = document.createDocumentFragment();
+  for (let number = 1; number <= pdf.numPages; number++) {
+    const button = document.createElement("button");
+    button.className = "thumbnail";
+    button.dataset.page = number;
+    button.setAttribute("aria-label", "Vai alla pagina " + number);
+    const preview = document.createElement("canvas");
+    preview.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.textContent = number;
+    button.append(preview, label);
+    button.onclick = () => showPage(number);
+    fragment.append(button);
+  }
+  thumbnails.replaceChildren(fragment);
+  for (const button of thumbnails.children) thumbnailObserver.observe(button);
+}
+
+async function drawThumbnails() {
+  if (drawingThumbnail) return;
+  drawingThumbnail = true;
+  try {
+    while (thumbnailQueue.length) {
+      const button = thumbnailQueue.shift();
+      try {
+        const page = await pdf.getPage(Number(button.dataset.page));
+        const original = page.getViewport({ scale: 1 });
+        const view = page.getViewport({ scale: 112 / original.width });
+        const preview = button.querySelector("canvas");
+        preview.width = Math.ceil(view.width * 1.5);
+        preview.height = Math.ceil(view.height * 1.5);
+        preview.style.aspectRatio = original.width + " / " + original.height;
+        await page.render({ canvas: preview, viewport: view, transform: [1.5, 0, 0, 1.5, 0, 0], annotationMode: pdfjs.AnnotationMode.DISABLE }).promise;
+        preview.dataset.ready = "";
+      } catch (error) {
+        console.error(error);
+        button.title = "Anteprima non disponibile. Premi per aprire la pagina.";
+      }
+    }
+  } finally {
+    drawingThumbnail = false;
+  }
+}
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.min.mjs", import.meta.url).href;
 const asset = path => new URL(path, import.meta.url).href;
@@ -52,6 +108,7 @@ window.addEventListener("HybridWebViewMessageReceived", async event => {
       enableXfa: false
     }).promise;
     get("find").disabled = false;
+    createThumbnails();
     await render();
   } catch (error) {
     fail(error);
@@ -64,6 +121,13 @@ function updateNavigation() {
   get("next").disabled = pageNumber >= pdf.numPages;
   get("zoom-out").disabled = zoom <= 0.7;
   get("zoom-in").disabled = zoom >= 2.5;
+  const selected = thumbnails.querySelector('[aria-current="page"]');
+  const active = thumbnails.children[pageNumber - 1];
+  if (selected !== active) {
+    selected?.removeAttribute("aria-current");
+    active?.setAttribute("aria-current", "page");
+    active?.scrollIntoView({ block: "nearest" });
+  }
 }
 
 async function render() {
@@ -76,7 +140,7 @@ async function render() {
   const current = await pdf.getPage(pageNumber);
   if (revision !== renderRevision) return;
   const original = current.getViewport({ scale: 1 });
-  const view = current.getViewport({ scale: Math.min(1.8, (viewport.clientWidth - 32) / original.width) * zoom });
+  const view = current.getViewport({ scale: Math.max(1, viewport.clientWidth - 24) / original.width * zoom });
   const output = Math.min(window.devicePixelRatio || 1, 2, 4096 / Math.max(view.width, view.height));
   canvas.width = Math.ceil(view.width * output);
   canvas.height = Math.ceil(view.height * output);

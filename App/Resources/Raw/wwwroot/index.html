@@ -16,22 +16,30 @@
     <button id="previous" aria-label="Pagina precedente" disabled>←</button>
     <span id="page" aria-live="polite">–</span>
     <button id="next" aria-label="Pagina successiva" disabled>→</button>
-    <button id="zoom-out" aria-label="Riduci" disabled>−</button>
-    <button id="zoom-in" aria-label="Ingrandisci" disabled>+</button>
   </div>
   <form id="search">
     <input id="query" type="search" placeholder="Cerca nel documento" aria-label="Testo da cercare" autocomplete="off" maxlength="200">
     <button id="find" disabled>Cerca</button>
   </form>
+  <div class="zoom" role="group" aria-label="Zoom del documento">
+    <span class="magnifier" aria-hidden="true"></span>
+    <button id="zoom-out" aria-label="Riduci" disabled>−</button>
+    <button id="zoom-in" aria-label="Ingrandisci" disabled>+</button>
+  </div>
   <div class="matches" id="matches" hidden>
     <span id="count" role="status"></span>
     <button id="match-previous">Precedente</button>
     <button id="match-next">Successivo</button>
   </div>
 </header>
+<div class="reader">
+<aside aria-label="Anteprime delle pagine">
+  <nav id="thumbnails" aria-label="Scegli una pagina"></nav>
+</aside>
 <main id="viewport" aria-label="Pagina del PDF">
   <p id="status" role="status">Apertura del documento…</p>
   <canvas id="canvas" aria-label="Contenuto della pagina"></canvas>
 </main>
+</div>
 </body>
 </html>

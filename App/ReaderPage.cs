@@ -32,6 +32,19 @@ internal sealed class ReaderPage : ContentPage
     public ReaderPage()
     {
         BackgroundColor = Color.FromArgb("#EEF4F4");
+        var ink = Color.FromArgb("#122834");
+        var muted = Color.FromArgb("#46616A");
+        foreach (var field in new[] { endpoint, code })
+        {
+            field.BackgroundColor = Color.FromArgb("#F3F8F8");
+            field.TextColor = ink;
+            field.PlaceholderColor = muted;
+            field.MinimumHeightRequest = 48;
+        }
+        activate.BackgroundColor = Color.FromArgb("#126157");
+        activate.TextColor = Colors.White;
+        activate.MinimumHeightRequest = 48;
+        activate.CornerRadius = 10;
 #if ALLOW_INSECURE_TEST_SERVER && ANDROID
         endpoint.Text = "http://10.0.2.2:5187";
 #elif ALLOW_INSECURE_TEST_SERVER
@@ -39,27 +52,37 @@ internal sealed class ReaderPage : ContentPage
 #endif
         var form = new VerticalStackLayout
         {
-            Padding = new Thickness(24, 44),
-            Spacing = 14,
-            MaximumWidthRequest = 520,
-            HorizontalOptions = LayoutOptions.Center,
+            Spacing = 12,
             Children =
             {
-                new Label { Text = "PDF Custode", FontSize = 34, FontAttributes = FontAttributes.Bold },
-                new Label { Text = "Attiva il documento", FontSize = 20 },
-                new Label { Text = "Inserisci l’indirizzo del servizio e il codice ricevuti dal proprietario del PDF. Dopo l’attivazione puoi leggere e cercare nel documento offline." },
-                new Label { Text = "Indirizzo del servizio" },
+                new Label { Text = "PDF Custode", FontSize = 34, FontAttributes = FontAttributes.Bold, TextColor = ink },
+                new Label { Text = "Attiva il documento", FontSize = 20, FontAttributes = FontAttributes.Bold, TextColor = ink },
+                new Label { Text = "Inserisci l’indirizzo del servizio e il codice ricevuti dal proprietario del PDF. Dopo l’attivazione puoi leggere e cercare nel documento offline.", TextColor = muted },
+                new Label { Text = "Indirizzo del servizio", FontAttributes = FontAttributes.Bold, TextColor = ink },
                 endpoint,
 #if ALLOW_INSECURE_TEST_SERVER
-                new Label { Text = "Collaudo locale: HTTP consentito solo sulla rete privata.", FontSize = 12 },
+                new Label { Text = "Collaudo locale: HTTP consentito solo sulla rete privata.", FontSize = 12, TextColor = muted },
 #endif
-                new Label { Text = "Codice" },
+                new Label { Text = "Codice", FontAttributes = FontAttributes.Bold, TextColor = ink },
                 code,
                 activate,
                 status
             }
         };
-        Content = new ScrollView { Content = form };
+        Content = new ScrollView
+        {
+            Padding = new Thickness(20, 36),
+            Content = new Border
+            {
+                BackgroundColor = Colors.White,
+                Stroke = Color.FromArgb("#CCDCDD"),
+                StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = 18 },
+                MaximumWidthRequest = 520,
+                VerticalOptions = LayoutOptions.Start,
+                Padding = new Thickness(24, 26),
+                Content = form
+            }
+        };
         activate.Clicked += Activate;
     }
 

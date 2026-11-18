@@ -2,21 +2,60 @@
   color-scheme: light;
   font-family: system-ui, sans-serif;
   color: #142b37;
-  background: #dce8e9;
+  background: #e6eeee;
   user-select: none;
 }
 * { box-sizing: border-box; }
 body { margin: 0; height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
-header { background: #122834; color: #f7fcfc; padding: 10px 14px; display: grid; gap: 8px; }
-.navigation, form, .matches { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.navigation strong { margin-right: auto; white-space: nowrap; }
-button, input { font: inherit; padding: 7px 10px; border-radius: 6px; border: 1px solid #c0d2d6; }
-button { cursor: pointer; background: #f0f9f8; color: #142b37; min-height: 38px; }
-button:disabled { opacity: .5; cursor: default; }
-input { flex: 1; min-width: 120px; background: #fff; color: #142b37; }
+header {
+  background: #122834;
+  color: #f7fcfc;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  border-bottom: 1px solid #355661;
+  box-shadow: 0 3px 12px #12283426;
+}
+.navigation, form, .matches { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.navigation strong { margin-right: 12px; white-space: nowrap; font-size: 1rem; }
+button, input { font: inherit; padding: 5px 9px; border-radius: 7px; border: 1px solid #53727c; min-height: 34px; }
+button { cursor: pointer; background: #233f4b; color: #f7fcfc; font-weight: 600; }
+.navigation button, .zoom button { min-width: 34px; }
+button:hover:not(:disabled) { background: #365762; }
+button:disabled { opacity: .55; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid #8fe9d9; outline-offset: 2px; }
+input { flex: 1; min-width: 120px; background: #f7fcfc; color: #142b37; }
+input::placeholder { color: #46616a; }
+#find { background: #a5e8db; color: #123b35; border-color: #a5e8db; }
+#find:hover:not(:disabled) { background: #c8f5ec; }
+#page { min-width: 4ch; text-align: center; font-variant-numeric: tabular-nums; }
+.matches { flex-basis: 100%; border-top: 1px solid #355661; padding-top: 8px; }
+#search { margin-left: auto; flex: 0 1 360px; flex-wrap: nowrap; min-width: 200px; }
+#query { width: 100%; }
+.zoom { display: flex; align-items: center; gap: 6px; }
+.magnifier { width: 14px; height: 14px; border: 2px solid #d4eeeb; border-radius: 50%; position: relative; margin: 0 7px 4px 0; }
+.magnifier::after { content: ""; position: absolute; width: 7px; height: 2px; background: #d4eeeb; top: 10px; left: 9px; transform: rotate(45deg); }
 [hidden] { display: none !important; }
-main { flex: 1; overflow: auto; padding: 16px; }
-canvas { display: block; margin-inline: auto; background: white; box-shadow: 0 3px 18px #12283424; }
-canvas:not([data-ready]) { display: none; }
+.reader { display: flex; flex: 1; min-height: 0; }
+aside { flex: 0 0 148px; overflow: auto; padding: 14px 10px; background: #dce6e7; border-right: 1px solid #bed0d2; }
+#thumbnails { display: grid; gap: 12px; }
+.thumbnail { width: 100%; display: grid; justify-items: center; gap: 6px; padding: 6px; background: transparent; color: #34515a; border: 2px solid transparent; font-size: 12px; }
+.thumbnail:hover:not(:disabled) { background: #edf6f4; }
+.thumbnail[aria-current="page"] { border-color: #126157; background: #edf8f5; color: #124f47; }
+.thumbnail canvas { width: 100%; aspect-ratio: 1 / 1.414; background: #f9fbfb; box-shadow: 0 2px 5px #12283425; }
+main { flex: 1; min-width: 0; overflow: auto; padding: 12px; background: linear-gradient(#dde9ea, #edf3f3); }
+#canvas { display: block; margin-inline: auto; background: white; box-shadow: 0 1px 0 1px #15354120, 0 8px 25px #12283429; }
+#canvas:not([data-ready]) { display: none; }
 #status { text-align: center; }
+@media (max-width: 700px) {
+  header { gap: 8px; padding: 8px; }
+  .navigation { flex: 1; }
+  .navigation strong { margin-right: auto; }
+  #search { order: 2; flex: 1 1 100%; }
+  .matches { order: 3; }
+  aside { flex-basis: 88px; padding: 8px 4px; }
+  .thumbnail { padding: 3px; }
+}
 @media print { body { display: none !important; } }
