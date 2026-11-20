@@ -17,3 +17,8 @@
 *.jks
 activation-code.txt
 server-state.json
+**/appsettings.Local.json
+**/.audit/
+**/issued-codes.json
+*.cer
+*.crt

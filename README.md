@@ -1,5 +1,9 @@
 # PDF Custode
 
+## Integrazione SharePoint
+
+Il backend supporta le liste PDF_Distribuzioni, PDF_Licenze e PDF_Log tramite Microsoft Graph ed Entra ID. Configurazione, permessi, certificato e prove sono descritti in [docs/SHAREPOINT.md](docs/SHAREPOINT.md). Per impostazione predefinita la connessione è disabilitata fino alla configurazione dell'identità applicativa. I log locali persistono anche senza SharePoint. Eseguire `dotnet run --project Tests` e, dopo una build Release, `pwsh -File Tests/HttpSmoke.ps1` per i controlli locali.
+
 Lettore Windows x64 e Android 15+ con biblioteca e importazione di file cifrati `.pdfcustode`. Dopo l'attivazione i documenti sono leggibili offline.
 
 ## Preparare un documento

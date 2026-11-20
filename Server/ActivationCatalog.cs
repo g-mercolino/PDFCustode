@@ -1,23 +1,64 @@
-using System.Text.Json;
 using PdfCustode.Core;
 
 namespace PdfCustode.Server;
 
 public sealed class ActivationCatalog(string root)
 {
-    public SignedLicense? Activate(ActivationRequest request)
+    private static readonly HashSet<string> ExcludedFolders = new(StringComparer.OrdinalIgnoreCase)
     {
-        if (string.IsNullOrWhiteSpace(request.DocumentId) || request.DocumentId.Length > 128)
-            return null;
-        // Discover new documents on each activation, including legacy single-document folders.
-        foreach (string stateFile in Directory.EnumerateFiles(root, "server-state.json", SearchOption.AllDirectories))
+        ".audit", "audit", "logs", "pending", "history", "acknowledged", ".git"
+    };
+
+    public SignedLicense? Activate(ActivationRequest request, int? maxActivations = null)
+    {
+        var document = FindDocument(request.DocumentId);
+        if (document is null) return null;
+        using var store = new ActivationStore(document.Folder);
+        return store.Activate(request, maxActivations);
+    }
+
+    public SignedLicense? TryGetExisting(ActivationRequest request)
+    {
+        var document = FindDocument(request.DocumentId);
+        if (document is null) return null;
+        using var store = new ActivationStore(document.Folder);
+        return store.TryGetExisting(request);
+    }
+
+    public IReadOnlyList<DocumentSnapshot> GetSnapshots()
+    {
+        var result = new List<DocumentSnapshot>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string folder in DocumentFolders())
         {
-            using var state = JsonDocument.Parse(File.ReadAllText(stateFile));
-            if (state.RootElement.GetProperty("DocumentId").GetString() != request.DocumentId)
-                continue;
-            using var store = new ActivationStore(Path.GetDirectoryName(stateFile)!);
-            return store.Activate(request);
+            using var store = new ActivationStore(folder);
+            var snapshot = store.GetSnapshot();
+            if (!ids.Add(snapshot.DocumentId))
+                throw new InvalidDataException("Identificativo documento duplicato nell'archivio amministrativo.");
+            result.Add(snapshot);
         }
-        return null;
+        return result;
+    }
+
+    private DocumentSnapshot? FindDocument(string? documentId)
+    {
+        if (string.IsNullOrWhiteSpace(documentId) || documentId.Length > 128) return null;
+        return GetSnapshots().SingleOrDefault(document => document.DocumentId == documentId);
+    }
+
+    private IEnumerable<string> DocumentFolders()
+    {
+        var remaining = new Stack<string>();
+        remaining.Push(Path.GetFullPath(root));
+        while (remaining.TryPop(out string? folder))
+        {
+            if (File.Exists(Path.Combine(folder, "server-state.json"))) yield return folder;
+            foreach (string child in Directory.EnumerateDirectories(folder).Order(StringComparer.Ordinal))
+            {
+                if (ExcludedFolders.Contains(Path.GetFileName(child)) ||
+                    (File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) continue;
+                remaining.Push(child);
+            }
+        }
     }
 }

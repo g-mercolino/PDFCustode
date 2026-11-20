@@ -3,6 +3,10 @@ using System.Text.Json;
 using PdfCustode.Core;
 using PdfCustode.Server;
 
+await GraphTests.RunAsync();
+await LocalIntegrationTests.RunAsync();
+await SharePointSyncTests.RunAsync();
+
 using RSA authority = RSA.Create(3072);
 using RSA device = RSA.Create(2048);
 using RSA other = RSA.Create(2048);
