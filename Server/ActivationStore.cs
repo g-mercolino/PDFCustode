@@ -1,13 +1,28 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 using PdfCustode.Core;
 
 namespace PdfCustode.Server;
 
 public sealed class LicenseQuotaExceededException() : InvalidOperationException("La distribuzione ha esaurito le licenze disponibili.");
 
-public sealed record ActivationSnapshot(string CodeHash, string? DeviceKeyHash, SignedLicense? License, string? ActivationCode);
+public sealed record ActivationSnapshot(string CodeHash, string? DeviceKeyHash, SignedLicense? License, string? ActivationCode,
+    ActivationProfile? Profile = null, int? QuotaYear = null)
+{
+    public int? EffectiveQuotaYear
+    {
+        get
+        {
+            if (License is null) return null;
+            if (QuotaYear is int year) return year;
+            var payload = JsonSerializer.Deserialize<LicensePayload>(Convert.FromBase64String(License.Payload))
+                ?? throw new InvalidDataException("Licenza locale non valida.");
+            return DateTimeOffset.ParseExact(payload.IssuedAt, "O", CultureInfo.InvariantCulture).UtcDateTime.Year;
+        }
+    }
+}
 public sealed record DocumentSnapshot(string Folder, string DocumentId, IReadOnlyList<ActivationSnapshot> Codes);
 
 public sealed class ActivationStore : IDisposable
@@ -45,9 +60,11 @@ public sealed class ActivationStore : IDisposable
         return code;
     }
 
-    public SignedLicense? Activate(ActivationRequest request, int? maxActivations = null)
+    public SignedLicense? Activate(ActivationRequest request, int? maxActivations = null,
+        ActivationProfile? profile = null, int? quotaYear = null)
     {
         if (maxActivations < 0) throw new ArgumentOutOfRangeException(nameof(maxActivations));
+        if (quotaYear is < 1 or > 9999) throw new ArgumentOutOfRangeException(nameof(quotaYear));
         if (!IsValidRequest(request)) return null;
 
         lock (gate)
@@ -79,7 +96,7 @@ public sealed class ActivationStore : IDisposable
             }
             finally { CryptographicOperations.ZeroMemory(key); }
 
-            state.Codes[index] = entry with { DeviceKeyHash = hash, License = signed };
+            state.Codes[index] = entry with { DeviceKeyHash = hash, License = signed, Profile = profile, QuotaYear = quotaYear };
             WriteState(stateFile, state, overwrite: true);
             return signed;
         }
@@ -109,7 +126,7 @@ public sealed class ActivationStore : IDisposable
             using var fileLock = AcquireFileLock();
             State state = ReadState();
             return new(folder, state.DocumentId, state.Codes.Select(entry =>
-                new ActivationSnapshot(entry.CodeHash, entry.DeviceKeyHash, entry.License, entry.ActivationCode)).ToArray());
+                new ActivationSnapshot(entry.CodeHash, entry.DeviceKeyHash, entry.License, entry.ActivationCode, entry.Profile, entry.QuotaYear)).ToArray());
         }
     }
 
@@ -148,7 +165,7 @@ public sealed class ActivationStore : IDisposable
         }
     }
 
-    private static bool IsValidRequest(ActivationRequest request) =>
+    internal static bool IsValidRequest(ActivationRequest request) =>
         request.Code is { Length: 32 } && request.Code.All(Uri.IsHexDigit) &&
         request.DocumentId is { Length: > 0 and <= 128 } &&
         request.DevicePublicKey is { Length: > 0 and <= 1024 };
@@ -186,6 +203,7 @@ public sealed class ActivationStore : IDisposable
     }
 
     private sealed record State(string DocumentId, string DocumentKey, List<CodeEntry> Codes);
-    private sealed record CodeEntry(string CodeHash, string? DeviceKeyHash, SignedLicense? License, string? ActivationCode = null);
+    private sealed record CodeEntry(string CodeHash, string? DeviceKeyHash, SignedLicense? License, string? ActivationCode = null,
+        ActivationProfile? Profile = null, int? QuotaYear = null);
 }
 

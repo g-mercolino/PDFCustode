@@ -14,7 +14,9 @@ public sealed class SharePointOptions
     public string CertificateStoreLocation { get; set; } = "CurrentUser";
     public string ManagedIdentityClientId { get; set; } = "";
     public int SyncIntervalSeconds { get; set; } = 30;
-    public List<DistributionMapping> Distributions { get; set; } = [];
+    public int QuotaYear { get; set; }
+    public int InitialLicenseTotal { get; set; }
+    public List<string> DocumentIds { get; set; } = [];
     public void Validate()
     {
         if (!Enabled) return;
@@ -28,11 +30,12 @@ public sealed class SharePointOptions
         if (lists.Any(id => !Guid.TryParse(id, out _)) || lists.Select(Guid.Parse).Distinct().Count() != 3)
             throw Invalid("list IDs");
         if (SyncIntervalSeconds < 1 || SyncIntervalSeconds > 86400) throw Invalid("SyncIntervalSeconds");
-        if (Distributions is null || Distributions.Count == 0
-            || Distributions.Any(mapping => mapping is null || string.IsNullOrWhiteSpace(mapping.DocumentId) || string.IsNullOrWhiteSpace(mapping.DistribuzioneId) || mapping.LicenzeTotali < 0)
-            || Distributions.Select(mapping => mapping.DocumentId).Distinct(StringComparer.Ordinal).Count() != Distributions.Count
-            || Distributions.Select(mapping => mapping.DistribuzioneId).Distinct(StringComparer.Ordinal).Count() != Distributions.Count)
-            throw Invalid("Distributions");
+        if (QuotaYear is < 1 or > 9999) throw Invalid("QuotaYear");
+        if (InitialLicenseTotal < 0) throw Invalid("InitialLicenseTotal");
+        if (DocumentIds is null || DocumentIds.Count == 0
+            || DocumentIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128)
+            || DocumentIds.Distinct(StringComparer.Ordinal).Count() != DocumentIds.Count)
+            throw Invalid("DocumentIds");
         ValidateAuthentication();
     }
 
@@ -57,13 +60,4 @@ public sealed class SharePointOptions
     }
 
     static InvalidOperationException Invalid(string setting) => new($"SharePoint configuration is invalid: {setting}.");
-}
-public sealed class DistributionMapping
-{
-    public string DocumentId { get; set; } = "";
-    public string DistribuzioneId { get; set; } = "";
-    public string Title { get; set; } = "";
-    public string Cliente { get; set; } = "";
-    public string VersioneDocumento { get; set; } = "";
-    public int LicenzeTotali { get; set; }
 }

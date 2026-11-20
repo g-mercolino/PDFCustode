@@ -2,7 +2,7 @@
 
 ## Integrazione SharePoint
 
-Il backend supporta le liste PDF_Distribuzioni, PDF_Licenze e PDF_Log tramite Microsoft Graph ed Entra ID. Configurazione, permessi, certificato e prove sono descritti in [docs/SHAREPOINT.md](docs/SHAREPOINT.md). Per impostazione predefinita la connessione è disabilitata fino alla configurazione dell'identità applicativa. I log locali persistono anche senza SharePoint. Eseguire `dotnet run --project Tests` e, dopo una build Release, `pwsh -File Tests/HttpSmoke.ps1` per i controlli locali.
+Il backend supporta le liste PDF_Distribuzioni, PDF_Licenze e PDF_Log tramite Microsoft Graph ed Entra ID. Il monte licenze è annuale e condiviso tra i documenti configurati: una licenza viene impegnata soltanto all'attivazione. PDF_Licenze contiene le attivazioni completate con Nome, Cognome, CodiceUtente e NomeMacchina. DataFine=31/12/2100 è una convenzione amministrativa; la validità tecnica firmata resta di 30 giorni. Configurazione, permessi, certificato, migrazione delle colonne e prove sono descritti in [docs/SHAREPOINT.md](docs/SHAREPOINT.md). Per impostazione predefinita la connessione è disabilitata fino alla configurazione dell'identità applicativa. I log locali persistono anche senza SharePoint. Eseguire `dotnet run --project Tests` e, dopo una build Release, `pwsh -File Tests/HttpSmoke.ps1` per i controlli locali.
 
 Lettore Windows x64 e Android 15+ con biblioteca e importazione di file cifrati `.pdfcustode`. Dopo l'attivazione i documenti sono leggibili offline.
 
@@ -37,7 +37,7 @@ Dal PC usare `http://localhost:5187`. Dal tablet sulla stessa rete Wi-Fi usare l
 
 ## Usare la biblioteca
 
-Installare l'APK firmato in `Destinatario-Android` o aprire `Destinatario-Windows-Home/PdfCustode.App.exe`. Trasferire il file `.pdfcustode`, premere **Apri documento**, selezionarlo e inserire indirizzo e codice di attivazione.
+Installare l'APK firmato in `Destinatario-Android` o aprire `Destinatario-Windows-Home/PdfCustode.App.exe`. Trasferire il file `.pdfcustode`, premere **Apri documento**, selezionarlo e inserire indirizzo del servizio, Nome, Cognome, Codice utente e codice di attivazione. Codice utente e codice di attivazione sono campi distinti; nome macchina e piattaforma vengono inviati automaticamente. Il destinatario non effettua accesso a SharePoint.
 
 La biblioteca conserva una copia cifrata di ogni documento e una licenza separata. Il pulsante **Home** torna all'elenco. Reimportare lo stesso file conserva la licenza. Per nuovi PDF basta preparare e inviare un nuovo `.pdfcustode`.
 

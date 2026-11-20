@@ -3,6 +3,12 @@ using System.Text.Json;
 using PdfCustode.Core;
 using PdfCustode.Server;
 
+if (args.Length > 0 && args[0] == "--annual-quota-child")
+{
+    AnnualActivationTests.RunChild(args);
+    return;
+}
+await AnnualActivationTests.RunAsync();
 await GraphTests.RunAsync();
 await LocalIntegrationTests.RunAsync();
 await SharePointSyncTests.RunAsync();

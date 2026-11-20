@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PdfCustode.Core;
@@ -27,6 +28,9 @@ internal sealed class ReaderPage : ContentPage
     private readonly IDispatcherTimer expirationTimer;
     private DateTimeOffset? readerExpiresAt;
     private readonly Entry endpoint = new() { Placeholder = "https://licenze.example.it", Keyboard = Keyboard.Url };
+    private readonly Entry firstName = new() { Placeholder = "Il tuo nome", MaxLength = 100, IsSpellCheckEnabled = false, IsTextPredictionEnabled = false };
+    private readonly Entry lastName = new() { Placeholder = "Il tuo cognome", MaxLength = 100, IsSpellCheckEnabled = false, IsTextPredictionEnabled = false };
+    private readonly Entry userCode = new() { Placeholder = "Codice utente", MaxLength = 128, IsSpellCheckEnabled = false, IsTextPredictionEnabled = false };
     private readonly Entry code = new() { Placeholder = "Codice di attivazione", IsPassword = true, IsSpellCheckEnabled = false };
     private readonly Label status = new() { TextColor = Color.FromArgb("#A33D37"), LineBreakMode = LineBreakMode.WordWrap };
     private readonly Button activate = new() { Text = "Attiva su questo dispositivo", IsEnabled = false };
@@ -46,7 +50,7 @@ internal sealed class ReaderPage : ContentPage
         BackgroundColor = Color.FromArgb("#EEF4F4");
         var ink = Color.FromArgb("#122834");
         var muted = Color.FromArgb("#46616A");
-        foreach (var field in new[] { endpoint, code })
+        foreach (var field in new[] { endpoint, firstName, lastName, userCode, code })
         {
             field.BackgroundColor = Color.FromArgb("#F3F8F8");
             field.TextColor = ink;
@@ -69,14 +73,21 @@ internal sealed class ReaderPage : ContentPage
             {
                 new Label { Text = "PDF Custode", FontSize = 34, FontAttributes = FontAttributes.Bold, TextColor = ink },
                 new Label { Text = "Attiva il documento", FontSize = 20, FontAttributes = FontAttributes.Bold, TextColor = ink },
-                new Label { Text = "Inserisci l’indirizzo del servizio e il codice ricevuti dal proprietario del PDF. La licenza dura 30 giorni dall’attivazione e consente la lettura offline entro la scadenza.", TextColor = muted },
+                new Label { Text = "Inserisci i tuoi dati, l’indirizzo del servizio e il codice di attivazione ricevuto dal proprietario del PDF. Tutti i campi sono obbligatori. La licenza dura 30 giorni dall’attivazione e consente la lettura offline entro la scadenza.", TextColor = muted },
+                new Label { Text = "Nome", FontAttributes = FontAttributes.Bold, TextColor = ink },
+                firstName,
+                new Label { Text = "Cognome", FontAttributes = FontAttributes.Bold, TextColor = ink },
+                lastName,
+                new Label { Text = "Codice utente", FontAttributes = FontAttributes.Bold, TextColor = ink },
+                userCode,
                 new Label { Text = "Indirizzo del servizio", FontAttributes = FontAttributes.Bold, TextColor = ink },
                 endpoint,
 #if ALLOW_INSECURE_TEST_SERVER
                 new Label { Text = "Collaudo locale: HTTP consentito solo sulla rete privata.", FontSize = 12, TextColor = muted },
 #endif
-                new Label { Text = "Codice", FontAttributes = FontAttributes.Bold, TextColor = ink },
+                new Label { Text = "Codice di attivazione", FontAttributes = FontAttributes.Bold, TextColor = ink },
                 code,
+                new Label { Text = "Il nome del dispositivo e la piattaforma vengono rilevati automaticamente.", FontSize = 12, TextColor = muted },
                 activate,
                 status
             }
@@ -140,6 +151,27 @@ internal sealed class ReaderPage : ContentPage
 
     private async void Activate(object? sender, EventArgs args)
     {
+        var nome = NormalizeProfileValue(firstName.Text, 100);
+        if (nome is null)
+        {
+            status.Text = "Inserisci un nome valido (massimo 100 caratteri).";
+            firstName.Focus();
+            return;
+        }
+        var cognome = NormalizeProfileValue(lastName.Text, 100);
+        if (cognome is null)
+        {
+            status.Text = "Inserisci un cognome valido (massimo 100 caratteri).";
+            lastName.Focus();
+            return;
+        }
+        var codiceUtente = NormalizeProfileValue(userCode.Text, 128);
+        if (codiceUtente is null)
+        {
+            status.Text = "Inserisci un codice utente valido (massimo 128 caratteri).";
+            userCode.Focus();
+            return;
+        }
         if (string.IsNullOrWhiteSpace(code.Text))
         {
             status.Text = "Inserisci il codice di attivazione.";
@@ -158,14 +190,17 @@ internal sealed class ReaderPage : ContentPage
         try
         {
             using var device = new DeviceKey();
-            var request = new ActivationRequest(code.Text.Trim(), document!.DocumentId, device.PublicKey);
+            var request = new ActivationRequest(code.Text.Trim(), document!.DocumentId, device.PublicKey,
+                Nome: nome, Cognome: cognome, CodiceUtente: codiceUtente,
+                NomeMacchina: GetMachineName(), Piattaforma: GetPlatform());
             using var response = await Client.PostAsJsonAsync(new Uri(service, "/api/activate"), request, ReaderJson.Default.ActivationRequest);
             if (!response.IsSuccessStatusCode)
             {
                 status.Text = response.StatusCode switch
                 {
                     HttpStatusCode.Conflict => "Questo codice è già associato a un altro dispositivo.",
-                    HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized
+                    HttpStatusCode.BadRequest => "I dati di attivazione non sono validi. Controlla nome, cognome e codice utente.",
+                    HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized
                         => "Il servizio ha rifiutato il codice per questo documento.",
                     _ => "Il servizio di attivazione non è disponibile. Riprova."
                 };
@@ -181,6 +216,9 @@ internal sealed class ReaderPage : ContentPage
                 await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(license, ReaderJson.Default.SignedLicense));
                 File.Move(temporaryPath, licensePath, overwrite: true);
                 code.Text = string.Empty;
+                firstName.Text = string.Empty;
+                lastName.Text = string.Empty;
+                userCode.Text = string.Empty;
                 OpenReader(bytes);
             }
             catch
@@ -206,6 +244,50 @@ internal sealed class ReaderPage : ContentPage
         {
             activate.IsEnabled = true;
         }
+    }
+
+    private static string? NormalizeProfileValue(string? value, int maximumLength)
+    {
+        if (value is null || value.Any(char.IsControl)) return null;
+        string normalized;
+        try { normalized = value.Trim().Normalize(NormalizationForm.FormC); }
+        catch (ArgumentException) { return null; }
+        return normalized.Length > 0 && normalized.Length <= maximumLength ? normalized : null;
+    }
+
+    private static string NormalizeMachineName(string? value)
+    {
+        string normalized;
+        try
+        {
+            normalized = new string((value ?? string.Empty).Where(character => !char.IsControl(character)).ToArray())
+                .Trim().Normalize(NormalizationForm.FormC);
+        }
+        catch (ArgumentException) { return string.Empty; }
+        if (normalized.Length <= 255) return normalized;
+        normalized = normalized[..255];
+        return char.IsHighSurrogate(normalized[^1]) ? normalized[..^1] : normalized;
+    }
+
+    private static string GetMachineName()
+    {
+#if WINDOWS
+        string name = NormalizeMachineName(Environment.MachineName);
+        return string.IsNullOrWhiteSpace(name) ? "PC Windows" : name;
+#else
+        string name = NormalizeMachineName(DeviceInfo.Current.Name);
+        if (string.IsNullOrWhiteSpace(name)) name = NormalizeMachineName(DeviceInfo.Current.Model);
+        return string.IsNullOrWhiteSpace(name) ? "Dispositivo Android" : name;
+#endif
+    }
+
+    private static string GetPlatform()
+    {
+#if WINDOWS
+        return "Windows";
+#else
+        return "Android";
+#endif
     }
 
     private static bool IsLocalTestEndpoint(Uri address)

@@ -6,7 +6,7 @@ if (!(Test-Path -LiteralPath $server)) { throw 'Compilare prima con dotnet build
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('pdfcustode-http-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 $authority = [Security.Cryptography.RSA]::Create(2048)
-$device = [Security.Cryptography.RSA]::Create(2048)
+$device = [Security.Cryptography.RSA]::Create(4096)
 $other = [Security.Cryptography.RSA]::Create(2048)
 $serviceProcess = $null
 try {
@@ -48,9 +48,18 @@ try {
         } finally { $content.Dispose() }
     }
     $body = @{Code=$code;DocumentId='smoke-document';DevicePublicKey=[Convert]::ToBase64String($device.ExportSubjectPublicKeyInfo())}
-    $json = $body | ConvertTo-Json -Compress
+    $profileError = Send-Activation ($body | ConvertTo-Json -Compress) 400
+    if (!($profileError | ConvertFrom-Json).error) { throw 'Messaggio di validazione profilo assente' }
+    $body.Nome = ('è' * 100)
+    $body.Cognome = ('ò' * 100)
+    $body.CodiceUtente = ('ù' * 128)
+    $body.NomeMacchina = ('à' * 255)
+    $body.Piattaforma = 'Windows'
+    $json = $body | ConvertTo-Json -Compress -EscapeHandling EscapeNonAscii
+    if ([Text.Encoding]::UTF8.GetByteCount($json) -le 4096) { throw 'Fixture Unicode troppo piccola per verificare il limite body' }
     $first = Send-Activation $json 200
-    $retry = Send-Activation $json 200
+    $retryBody = @{Code=$code;DocumentId='smoke-document';DevicePublicKey=$body.DevicePublicKey}
+    $retry = Send-Activation ($retryBody | ConvertTo-Json -Compress) 200
     if ($first -ne $retry) { throw 'Retry diverso dalla prima licenza' }
     $body.DevicePublicKey = [Convert]::ToBase64String($other.ExportSubjectPublicKeyInfo())
     $null = Send-Activation ($body|ConvertTo-Json -Compress) 403
@@ -58,14 +67,15 @@ try {
     $null = Send-Activation ($body|ConvertTo-Json -Compress) 403
     $null = Send-Activation '{' 400
     $null = Send-Activation 'test' 415 'text/plain'
-    $null = Send-Activation ('{"Code":"' + ('X'*5000) + '"}') 413
+    $null = Send-Activation ('{"Code":"' + ('X'*9000) + '"}') 413
     for($i=0;$i -lt 12;$i++) { $last=$client.PostAsync("$base/api/activate",[Net.Http.StringContent]::new('{}',[Text.Encoding]::UTF8,'application/json')).GetAwaiter().GetResult() }
     if ([int]$last.StatusCode -ne 429) { throw 'Rate limit non applicato' }
     $last.Dispose()
     $history = Get-ChildItem (Join-Path $fixture '.audit/history') -Filter '*.jsonl' | Get-Content
     if ($history.Count -lt 10) { throw 'Eventi audit mancanti' }
     if (($history -join "`n").Contains($code)) { throw 'Codice presente nei log' }
-    Write-Output "HTTP smoke PASS: activation, retry, device binding, unknown document, 400/413/415/429, correlation, $($history.Count) audit events, no plaintext code."
+    if (($history -join "`n").Contains($body.CodiceUtente)) { throw 'Dati del profilo presenti nei log' }
+    Write-Output "HTTP smoke PASS: profile validation, maximum Unicode profile, activation, profile-free retry, device binding, unknown document, 400/413/415/429, correlation, $($history.Count) audit events, no plaintext code or profile."
 } finally {
     if ($serviceProcess -and !$serviceProcess.HasExited) { $serviceProcess.Kill(); $serviceProcess.WaitForExit() }
     $authority.Dispose(); $device.Dispose(); $other.Dispose()

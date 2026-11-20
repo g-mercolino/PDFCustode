@@ -26,12 +26,18 @@ static class GraphTests
         {
             Enabled = true, Authentication = "ManagedIdentity", SiteId = "innowatedev.sharepoint.com,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
             DistributionListId = "11111111-1111-1111-1111-111111111111", LicenseListId = "22222222-2222-2222-2222-222222222222", LogListId = "33333333-3333-3333-3333-333333333333",
-            Distributions = [new() { DocumentId = "document", DistribuzioneId = "distribution", LicenzeTotali = 2 }]
+            QuotaYear = 2026, InitialLicenseTotal = 2, DocumentIds = ["document"]
         };
         valid.Validate();
-        valid.Distributions.Add(new() { DocumentId = "document", DistribuzioneId = "second" });
+        valid.DocumentIds.Add("document");
         Reject<InvalidOperationException>(valid.Validate);
-        valid.Distributions.RemoveAt(1);
+        valid.DocumentIds.RemoveAt(1);
+        valid.QuotaYear = 0;
+        Reject<InvalidOperationException>(valid.Validate);
+        valid.QuotaYear = 2026;
+        valid.InitialLicenseTotal = -1;
+        Reject<InvalidOperationException>(valid.Validate);
+        valid.InitialLicenseTotal = 2;
         valid.LicenseListId = valid.LogListId;
         Reject<InvalidOperationException>(valid.Validate);
         valid.LicenseListId = "22222222-2222-2222-2222-222222222222";

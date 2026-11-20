@@ -6,7 +6,10 @@ using System.Globalization;
 namespace PdfCustode.Core;
 
 public sealed record EncryptedDocument(string DocumentId, string Title, string Nonce, string Ciphertext, string Tag);
-public sealed record ActivationRequest(string Code, string DocumentId, string DevicePublicKey);
+public sealed record ActivationRequest(string Code, string DocumentId, string DevicePublicKey,
+    string? Nome = null, string? Cognome = null, string? CodiceUtente = null,
+    string? NomeMacchina = null, string? Piattaforma = null);
+public sealed record ActivationProfile(string Nome, string Cognome, string CodiceUtente, string NomeMacchina, string Piattaforma);
 public sealed record LicensePayload(string LicenseId, string DocumentId, string DeviceKeyHash, string WrappedKey, string IssuedAt, string? ExpiresAt = null);
 public sealed record SignedLicense(string Payload, string Signature);
 

@@ -15,7 +15,7 @@ builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
 builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 builder.Logging.AddFilter("Azure", LogLevel.Warning);
-builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 8192);
 if (string.IsNullOrWhiteSpace(builder.Configuration["urls"]))
     builder.WebHost.UseUrls("http://localhost:5187");
 string folder = Environment.GetEnvironmentVariable("PDFCUSTODE_DATA") ?? Path.Combine(builder.Environment.ContentRootPath, "data");
@@ -61,7 +61,7 @@ if (check || synchronize)
     return;
 }
 journal.Record(new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, "ErroreTecnico", "Successo", "Avvio servizio",
-    Details: JsonSerializer.Serialize(new { reason = "ServerStarted", configuredDocuments = sharePoint.Distributions.Count })));
+    Details: JsonSerializer.Serialize(new { reason = "ServerStarted", configuredDocuments = sharePoint.DocumentIds.Count })));
 app.Lifetime.ApplicationStopping.Register(() =>
     journal.Record(new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, "ErroreTecnico", "Successo", "Arresto servizio",
         Details: JsonSerializer.Serialize(new { reason = "ServerStopping" }))));
@@ -137,6 +137,12 @@ app.MapPost("/api/activate", async (HttpContext context, ActivationCoordinator c
         journal.Record(new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, "Attivazione", "Rifiutato", "Licenze esaurite",
             RequestId: requestId, Details: JsonSerializer.Serialize(new { reason = "QuotaExceeded" })));
         return Results.Json(new { error = "Licenze disponibili esaurite.", requestId }, statusCode: 403);
+    }
+    catch (ActivationProfileValidationException error)
+    {
+        journal.Record(new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, "Attivazione", "Rifiutato", "Profilo di attivazione non valido",
+            RequestId: requestId, Details: JsonSerializer.Serialize(new { reason = "InvalidActivationProfile" })));
+        return Results.BadRequest(new { error = error.Message, requestId });
     }
     catch (Exception ex) when (ex is JsonException)
     {

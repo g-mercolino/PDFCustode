@@ -1,5 +1,7 @@
 # Integrazione SharePoint
 
+> Piano storico della prima integrazione. Il modello per documento e le vecchie colonne sono superati dal piano `superpowers/plans/2026-11-20-annual-license-profile.md`. Per configurare la versione corrente usare `SHAREPOINT.md`: monte annuale, soli codici attivati, profilo destinatario e DataFine amministrativa al 31/12/2100.
+
 Richiesta approvata dall'utente: modificare il backend nella repository corrente per popolare le tre liste esistenti e registrare gli eventi. Identità Entra non ancora creata; configurazione e test remoti dipendono dall'amministratore. Nessun accesso effettivo al tenant dichiarato fino al collaudo.
 
 ## Decisioni
