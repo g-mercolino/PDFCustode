@@ -223,6 +223,7 @@ get("search").addEventListener("submit", async event => {
   }
 });
 
+get("home").onclick = () => window.HybridWebView?.SendRawMessage("home");
 get("previous").onclick = () => showPage(pageNumber - 1);
 get("next").onclick = () => showPage(pageNumber + 1);
 get("zoom-out").onclick = () => { zoom = Math.max(0.7, zoom - 0.2); render().catch(fail); };

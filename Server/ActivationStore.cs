@@ -5,7 +5,7 @@ using PdfCustode.Core;
 
 namespace PdfCustode.Server;
 
-public sealed class ActivationStore(string folder) : IDisposable
+public sealed class ActivationStore(string folder, TimeProvider? clock = null) : IDisposable
 {
     private readonly string stateFile = Path.Combine(folder, "server-state.json");
     private readonly string keyFile = Path.Combine(folder, "authority-private.pem");
@@ -54,8 +54,9 @@ public sealed class ActivationStore(string folder) : IDisposable
             try
             {
                 string wrapped = Convert.ToBase64String(device.Encrypt(key, RSAEncryptionPadding.OaepSHA256));
+                var issued = (clock ?? TimeProvider.System).GetUtcNow();
                 signed = Crypto.Sign(new(Guid.NewGuid().ToString("N"), state.DocumentId, hash, wrapped,
-                    DateTimeOffset.UtcNow.ToString("O")), authority);
+                    issued.ToString("O"), issued.AddDays(30).ToString("O")), authority);
             }
             finally { CryptographicOperations.ZeroMemory(key); }
 

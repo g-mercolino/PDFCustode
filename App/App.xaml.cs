@@ -12,7 +12,7 @@ public partial class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        var window = new Window(new ReaderPage()) { Title = "PDF Custode" };
+        var window = new Window(new LibraryPage()) { Title = "PDF Custode" };
         return window;
     }
 }

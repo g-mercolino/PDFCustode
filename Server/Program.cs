@@ -8,9 +8,9 @@ builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 
 if (string.IsNullOrWhiteSpace(builder.Configuration["urls"]))
     builder.WebHost.UseUrls("http://localhost:5187");
 string folder = Environment.GetEnvironmentVariable("PDFCUSTODE_DATA") ?? Path.Combine(builder.Environment.ContentRootPath, "data");
-if (!File.Exists(Path.Combine(folder, "server-state.json")) || !File.Exists(Path.Combine(folder, "authority-private.pem")))
-    throw new InvalidOperationException("Impostare PDFCUSTODE_DATA sulla cartella server generata dal preparatore.");
-builder.Services.AddSingleton(new ActivationStore(folder));
+if (!Directory.Exists(folder))
+    throw new InvalidOperationException("Impostare PDFCUSTODE_DATA sulla cartella Admin o su una cartella server generata dal preparatore.");
+builder.Services.AddSingleton(new ActivationCatalog(folder));
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -23,7 +23,7 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 app.UseRateLimiter();
-app.MapPost("/api/activate", async (HttpRequest http, ActivationStore store, CancellationToken token) =>
+app.MapPost("/api/activate", async (HttpRequest http, ActivationCatalog store, CancellationToken token) =>
 {
     try
     {

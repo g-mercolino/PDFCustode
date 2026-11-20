@@ -20,7 +20,12 @@ internal sealed class ReaderPage : ContentPage
         Timeout = TimeSpan.FromSeconds(20)
     };
 
-    private readonly string licensePath = Path.Combine(FileSystem.AppDataDirectory, "license.json");
+    private readonly string licensePath;
+    private readonly Action backToLibrary;
+    private Action? clearReader;
+    private readonly View activationForm;
+    private readonly IDispatcherTimer expirationTimer;
+    private DateTimeOffset? readerExpiresAt;
     private readonly Entry endpoint = new() { Placeholder = "https://licenze.example.it", Keyboard = Keyboard.Url };
     private readonly Entry code = new() { Placeholder = "Codice di attivazione", IsPassword = true, IsSpellCheckEnabled = false };
     private readonly Label status = new() { TextColor = Color.FromArgb("#A33D37"), LineBreakMode = LineBreakMode.WordWrap };
@@ -29,8 +34,15 @@ internal sealed class ReaderPage : ContentPage
     private string? authority;
     private bool initialized;
 
-    public ReaderPage()
+    public ReaderPage(DocumentPackage package, string folder, Action backToLibrary)
     {
+        document = package.Document;
+        authority = package.Authority;
+        licensePath = Path.Combine(folder, "license.json");
+        this.backToLibrary = backToLibrary;
+        expirationTimer = Dispatcher.CreateTimer();
+        expirationTimer.Interval = TimeSpan.FromSeconds(1);
+        expirationTimer.Tick += (_, _) => CheckExpiration();
         BackgroundColor = Color.FromArgb("#EEF4F4");
         var ink = Color.FromArgb("#122834");
         var muted = Color.FromArgb("#46616A");
@@ -57,7 +69,7 @@ internal sealed class ReaderPage : ContentPage
             {
                 new Label { Text = "PDF Custode", FontSize = 34, FontAttributes = FontAttributes.Bold, TextColor = ink },
                 new Label { Text = "Attiva il documento", FontSize = 20, FontAttributes = FontAttributes.Bold, TextColor = ink },
-                new Label { Text = "Inserisci l’indirizzo del servizio e il codice ricevuti dal proprietario del PDF. Dopo l’attivazione puoi leggere e cercare nel documento offline.", TextColor = muted },
+                new Label { Text = "Inserisci l’indirizzo del servizio e il codice ricevuti dal proprietario del PDF. La licenza dura 30 giorni dall’attivazione e consente la lettura offline entro la scadenza.", TextColor = muted },
                 new Label { Text = "Indirizzo del servizio", FontAttributes = FontAttributes.Bold, TextColor = ink },
                 endpoint,
 #if ALLOW_INSECURE_TEST_SERVER
@@ -69,7 +81,7 @@ internal sealed class ReaderPage : ContentPage
                 status
             }
         };
-        Content = new ScrollView
+        activationForm = new ScrollView
         {
             Padding = new Thickness(20, 36),
             Content = new Border
@@ -83,6 +95,7 @@ internal sealed class ReaderPage : ContentPage
                 Content = form
             }
         };
+        SetDocumentContent(activationForm);
         activate.Clicked += Activate;
     }
 
@@ -90,39 +103,38 @@ internal sealed class ReaderPage : ContentPage
     {
         base.OnAppearing();
         if (initialized)
+        {
+            CheckExpiration();
+            if (readerExpiresAt is not null) expirationTimer.Start();
             return;
+        }
         initialized = true;
-        try
-        {
-            await using var source = await FileSystem.OpenAppPackageFileAsync("document.json");
-            document = await JsonSerializer.DeserializeAsync(source, ReaderJson.Default.EncryptedDocument);
-            await using var pub = await FileSystem.OpenAppPackageFileAsync("authority.pub");
-            using var text = new StreamReader(pub);
-            authority = (await text.ReadToEndAsync()).Trim();
-            if (document is null || authority.Length == 0)
-                throw new InvalidDataException();
-        }
-        catch (Exception error)
-        {
-            System.Diagnostics.Debug.WriteLine(error);
-            status.Text = "Il documento incorporato non è disponibile.";
-            return;
-        }
-
+        status.Text = document!.Title;
         activate.IsEnabled = true;
-        if (!File.Exists(licensePath))
+        string saved = File.Exists(licensePath) ? licensePath : Path.Combine(FileSystem.AppDataDirectory, "license.json");
+        if (!File.Exists(saved))
             return;
         try
         {
-            var license = JsonSerializer.Deserialize(await File.ReadAllTextAsync(licensePath), ReaderJson.Default.SignedLicense)
+            var license = JsonSerializer.Deserialize(await File.ReadAllTextAsync(saved), ReaderJson.Default.SignedLicense)
                 ?? throw new InvalidDataException();
             using var device = new DeviceKey();
-            OpenReader(Decrypt(license, device));
+            var bytes = Decrypt(license, device);
+            try
+            {
+                if (saved != licensePath) await File.WriteAllTextAsync(licensePath, JsonSerializer.Serialize(license, ReaderJson.Default.SignedLicense));
+                OpenReader(bytes);
+            }
+            catch { CryptographicOperations.ZeroMemory(bytes); throw; }
+        }
+        catch (LicenseExpiredException error)
+        {
+            status.Text = error.Message;
         }
         catch (Exception error)
         {
             System.Diagnostics.Debug.WriteLine(error);
-            status.Text = "La licenza salvata non è valida per questo dispositivo. Contatta il proprietario del documento.";
+            status.Text = File.Exists(licensePath) ? "La licenza salvata non è valida per questo dispositivo. Contatta il proprietario del documento." : document.Title;
         }
     }
 
@@ -181,6 +193,10 @@ internal sealed class ReaderPage : ContentPage
         {
             status.Text = "Impossibile contattare il servizio. Controlla l’indirizzo e la connessione.";
         }
+        catch (LicenseExpiredException error)
+        {
+            status.Text = error.Message;
+        }
         catch (Exception error)
         {
             System.Diagnostics.Debug.WriteLine(error);
@@ -212,6 +228,7 @@ internal sealed class ReaderPage : ContentPage
     private byte[] Decrypt(SignedLicense license, DeviceKey device)
     {
         var verified = Crypto.Verify(license, authority!, document!.DocumentId, device.PublicKey);
+        readerExpiresAt = Crypto.GetExpiration(verified);
         var key = device.Unwrap(verified);
         try
         {
@@ -225,6 +242,7 @@ internal sealed class ReaderPage : ContentPage
 
     private void OpenReader(byte[] bytes)
     {
+        if (DateTimeOffset.UtcNow >= readerExpiresAt) throw new LicenseExpiredException();
         var view = new HybridWebView { HybridRoot = "wwwroot", DefaultFile = "index.html" };
 #if WINDOWS
         if (Window?.Handler?.PlatformView is Microsoft.UI.Xaml.Window platformWindow)
@@ -254,15 +272,25 @@ internal sealed class ReaderPage : ContentPage
 #endif
         const int chunkSize = 48 * 1024;
         int offset = 0;
+        bool closed = false;
+        clearReader = () => { closed = true; CryptographicOperations.ZeroMemory(bytes); };
         view.RawMessageReceived += (_, message) =>
         {
+            if (message.Message == "home")
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    if (!closed) ReturnHome();
+                });
+                return;
+            }
             if (message.Message != "next")
                 return;
 
             // Android's JavaScript bridge can call back outside the UI thread.
             MainThread.BeginInvokeOnMainThread(() =>
             {
-                if (offset > bytes.Length)
+                if (closed || offset > bytes.Length)
                     return;
                 if (offset == bytes.Length)
                 {
@@ -279,6 +307,44 @@ internal sealed class ReaderPage : ContentPage
             });
         };
         Content = view;
+        expirationTimer.Start();
+    }
+
+    private void SetDocumentContent(View view)
+    {
+        if (view.Parent is Layout parent) parent.Remove(view);
+        var back = new Button { Text = "← Home", BackgroundColor = Color.FromArgb("#122834"), TextColor = Colors.White, HorizontalOptions = LayoutOptions.Start, Padding = new Thickness(14, 6), MinimumHeightRequest = 36, CornerRadius = 8, Margin = new Thickness(12, 8) };
+        back.Clicked += (_, _) => ReturnHome();
+        var layout = new Grid { RowDefinitions = { new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Star) } };
+        layout.Add(back, 0, 0);
+        layout.Add(view, 0, 1);
+        Content = layout;
+    }
+
+    private void ReturnHome()
+    {
+        if (!activate.IsEnabled) return;
+        expirationTimer.Stop();
+        clearReader?.Invoke();
+        clearReader = null;
+        backToLibrary();
+    }
+
+    protected override void OnDisappearing()
+    {
+        expirationTimer.Stop();
+        base.OnDisappearing();
+    }
+
+    private void CheckExpiration()
+    {
+        if (readerExpiresAt is null || DateTimeOffset.UtcNow < readerExpiresAt) return;
+        expirationTimer.Stop();
+        clearReader?.Invoke();
+        clearReader = null;
+        readerExpiresAt = null;
+        SetDocumentContent(activationForm);
+        status.Text = "La licenza di 30 giorni è scaduta. Richiedi un nuovo codice di attivazione.";
     }
 }
 

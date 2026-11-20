@@ -23,6 +23,8 @@ header {
 button, input { font: inherit; padding: 5px 9px; border-radius: 7px; border: 1px solid #53727c; min-height: 34px; }
 button { cursor: pointer; background: #233f4b; color: #f7fcfc; font-weight: 600; }
 .navigation button, .zoom button { min-width: 34px; }
+#home { display: inline-flex; align-items: center; gap: 7px; padding-inline: 12px; background: #a5e8db; color: #123b35; border-color: #a5e8db; margin-right: 4px; white-space: nowrap; }
+#home:hover { background: #c8f5ec; }
 button:hover:not(:disabled) { background: #365762; }
 button:disabled { opacity: .55; cursor: default; }
 button:focus-visible, input:focus-visible { outline: 2px solid #8fe9d9; outline-offset: 2px; }

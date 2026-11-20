@@ -1,13 +1,16 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 
 namespace PdfCustode.Core;
 
 public sealed record EncryptedDocument(string DocumentId, string Title, string Nonce, string Ciphertext, string Tag);
 public sealed record ActivationRequest(string Code, string DocumentId, string DevicePublicKey);
-public sealed record LicensePayload(string LicenseId, string DocumentId, string DeviceKeyHash, string WrappedKey, string IssuedAt);
+public sealed record LicensePayload(string LicenseId, string DocumentId, string DeviceKeyHash, string WrappedKey, string IssuedAt, string? ExpiresAt = null);
 public sealed record SignedLicense(string Payload, string Signature);
+
+public sealed class LicenseExpiredException() : CryptographicException("La licenza di 30 giorni è scaduta. Richiedi un nuovo codice di attivazione.");
 
 public static class Crypto
 {
@@ -38,7 +41,7 @@ public static class Crypto
         return new(Convert.ToBase64String(payload), Convert.ToBase64String(signature));
     }
 
-    public static LicensePayload Verify(SignedLicense license, string publicKey, string documentId, string devicePublicKey)
+    public static LicensePayload Verify(SignedLicense license, string publicKey, string documentId, string devicePublicKey, DateTimeOffset? now = null)
     {
         using var authority = ReadPublicKey(publicKey);
         byte[] payload = Convert.FromBase64String(license.Payload);
@@ -47,7 +50,26 @@ public static class Crypto
         var decoded = JsonSerializer.Deserialize<LicensePayload>(payload);
         if (decoded is null || decoded.DocumentId != documentId || decoded.DeviceKeyHash != DeviceHash(devicePublicKey))
             throw new CryptographicException("La licenza non corrisponde al documento o al dispositivo.");
+        var expiration = GetExpiration(decoded);
+        var current = now ?? DateTimeOffset.UtcNow;
+        if (current >= expiration) throw new LicenseExpiredException();
+        if (DateTimeOffset.ParseExact(decoded.IssuedAt, "O", CultureInfo.InvariantCulture) - current > TimeSpan.FromMinutes(5))
+            throw new CryptographicException("Controlla la data e l’ora del dispositivo.");
         return decoded;
+    }
+
+    public static DateTimeOffset GetExpiration(LicensePayload license)
+    {
+        if (!DateTimeOffset.TryParseExact(license.IssuedAt, "O", CultureInfo.InvariantCulture, DateTimeStyles.None, out var issued)
+            || issued > DateTimeOffset.MaxValue.AddDays(-30))
+            throw new CryptographicException("Data di attivazione della licenza non valida.");
+        var maximum = issued.AddDays(30);
+        // Older signed licenses already contain IssuedAt and receive the same 30-day limit.
+        if (license.ExpiresAt is null) return maximum;
+        if (!DateTimeOffset.TryParseExact(license.ExpiresAt, "O", CultureInfo.InvariantCulture, DateTimeStyles.None, out var expiration)
+            || expiration <= issued || expiration > maximum)
+            throw new CryptographicException("Scadenza della licenza non valida.");
+        return expiration;
     }
 
     public static byte[] UnwrapKey(LicensePayload payload, RSA device) =>
